@@ -1,0 +1,2 @@
+blaseball-mike==6.4.1
+fuse-python==1.0.4
