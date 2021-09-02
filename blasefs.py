@@ -59,7 +59,7 @@ class BlaseFS(Fuse):
             st.st_mode = stat.S_IFDIR | 0o555
         elif path_info["type"] == "file":
             st.st_mode = stat.S_IFREG | 0o444
-            st.st_size = 4206
+            st.st_size = 42069
         return st
 
     def readdir(self, path, offset):
