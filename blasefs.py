@@ -149,7 +149,13 @@ class BlaseFS(Fuse):
                 size = slen - offset
             return formatted_updates[offset : offset + size].encode()
         else:
-            return b""
+            # Weird bad hack to make tail work...
+            end_offset = 42069 - offset # how far from the end of the file it thinks it is
+            desired_offset = slen - end_offset
+            if desired_offset < slen:
+                if end_offset + size > slen:
+                    size = slen - offset
+                return formatted_updates[slen-end_offset : slen-end_offset + size].encode()
 
 
 TEAMS = {
