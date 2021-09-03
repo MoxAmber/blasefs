@@ -1,12 +1,12 @@
 import fuse
 from fuse import Fuse
-from blaseball_mike.models import SimulationData, Game
-from blaseball_mike.chronicler import get_game_updates
+import blaseball_mike
+from blaseball_mike.models import SimulationData
+from blaseball_mike.chronicler import get_game_updates, get_games
 import stat
+import sys
 
 fuse.fuse_python_api = (0, 2)
-
-
 class Stat(fuse.Stat):
     def __init__(self):
         self.st_mode = 0
@@ -72,33 +72,42 @@ class BlaseFS(Fuse):
         sim_data = SimulationData.load()
         if path_info.get("sorting") == "season":
             if "day" in path_info:
-                games = Game.load_by_day(path_info.get("season", 1), path_info["day"])
+                games = get_games(
+                    season=path_info.get("season", 1), day=path_info["day"]
+                )
                 if not games:
                     return -fuse.ENOENT
                 dirlist.extend(
-                    f"{game.home_team_nickname} vs {game.away_team_nickname}"
-                    for game in games.values()
+                    f"{game['data']['homeTeamNickname']} vs {game['data']['awayTeamNickname']}"
+                    for game in games
                 )
             elif "season" in path_info:
                 if path_info["season"] > sim_data.season or path_info["season"] < 1:
                     return -fuse.ENOENT
-                games = Game.load_by_season(path_info["season"])
+                games = get_games(season=path_info["season"], count=1, order="desc")
                 dirlist.extend(
-                    {str(game.day) for game in games.values() if game.game_start}
+                    {str(day) for day in range(1, games[0]["data"]["day"] + 1)}
                 )
             else:
                 dirlist.extend(map(str, range(1, sim_data.season + 1)))
         elif path_info.get("sorting") == "team":
             if "season" in path_info:
+                games = get_games(
+                        season=path_info["season"], team_ids=TEAMS[path_info["team"]]
+                    )
+                if not games:
+                    return -fuse.ENOENT
                 dirlist.extend(
-                    f'{game.day} vs {home if (home := game.home_team_nickname) != path_info["team"] else game.away_team_nickname}'
-                    for game in Game.load_by_season(
-                        path_info["season"], team_id=TEAMS[path_info["team"]]
-                    ).values()
+                    f"{game['data']['day']} vs {home if (home := game['data']['homeTeamNickname']) != path_info['team'] else game['data']['awayTeamNickname']}"
+                    for game in games
                 )
             elif "team" in path_info:
+                if path_info["team"] not in TEAMS:
+                    return -fuse.ENOENT
                 for season in range(1, sim_data.season + 1):
-                    if Game.load_by_season(season, team_id=TEAMS[path_info["team"]]):
+                    if get_games(
+                        season=season, team_ids=TEAMS[path_info["team"]], count=1
+                    ):
                         dirlist.append(str(season))
             else:
                 dirlist.extend(team for team in TEAMS)
@@ -119,15 +128,15 @@ class BlaseFS(Fuse):
         else:
             return -fuse.ENOENT
 
-        games = Game.load_by_season(
-            path_info.get("season", 1),
-            team_id=TEAMS[teams[0]],
+        games = get_games(
+            season=path_info.get("season", 1),
+            team_ids=TEAMS[teams[0]],
             day=path_info.get("day", 1),
         )
         if not games:
             return -fuse.ENOENT
 
-        updates = get_game_updates(game_ids=[next(iter(games.keys()))], count=2000)
+        updates = get_game_updates(game_ids=[games[0]["gameId"]], count=2000)
 
         if not updates:
             return -fuse.ENOENT
@@ -150,12 +159,16 @@ class BlaseFS(Fuse):
             return formatted_updates[offset : offset + size].encode()
         else:
             # Weird bad hack to make tail work...
-            end_offset = 42069 - offset # how far from the end of the file it thinks it is
+            end_offset = (
+                42069 - offset
+            )  # how far from the end of the file it thinks it is
             desired_offset = slen - end_offset
             if desired_offset < slen:
                 if end_offset + size > slen:
                     size = slen - offset
-                return formatted_updates[slen-end_offset : slen-end_offset + size].encode()
+                return formatted_updates[
+                    slen - end_offset : slen - end_offset + size
+                ].encode()
 
 
 TEAMS = {
@@ -188,5 +201,21 @@ TEAMS = {
 
 if __name__ == "__main__":
     server = BlaseFS()
-    server.parse(errex=1)
+
+    server.parser.add_option(mountopt="vcr", metavar="URL", default="", help="use blaseball.vcr at URL instead of Chronicler (ie. http://localhost:8000/)")
+    server.parse(values=server, errex=1)
+
+    if hasattr(server, "vcr"):
+        blaseball_mike.chronicler.v1.BASE_URL = f"{server.vcr}vcr/v1"
+        blaseball_mike.chronicler.v2.BASE_URL_V2 = f"{server.vcr}vcr/v2"
+
+        try:
+            games = get_games(count=1)
+            if not games:
+                print(f"Could not connect to blaseball.vcr at {server.vcr}", file=sys.stderr)
+                sys.exit(1)
+        except:
+            print(f"Could not connect to blaseball.vcr at {server.vcr}", file=sys.stderr)
+            sys.exit(1)
+
     server.main()
