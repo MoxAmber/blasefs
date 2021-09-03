@@ -8,7 +8,7 @@ Installation may require `libfuse-dev` or similar installed, to compile the `fus
 `python blasefs.py <mountpoint>`
 
 You can also provide the URL for an instance of [blaseball.vcr](https://github.com/alisww/blaseball.vcr)
-if you'd rather not use Chronicler, or just for fun.
+if you'd rather not use Chronicler, or just for fun.  
 `python blasefs.py -o vcr=URL <mountpoint>`
 
 ## Caveats
