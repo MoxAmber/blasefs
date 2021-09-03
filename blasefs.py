@@ -7,6 +7,8 @@ import stat
 import sys
 
 fuse.fuse_python_api = (0, 2)
+
+
 class Stat(fuse.Stat):
     def __init__(self):
         self.st_mode = 0
@@ -84,17 +86,18 @@ class BlaseFS(Fuse):
             elif "season" in path_info:
                 if path_info["season"] > sim_data.season or path_info["season"] < 1:
                     return -fuse.ENOENT
-                games = get_games(season=path_info["season"], count=1, order="desc")
-                dirlist.extend(
-                    {str(day) for day in range(1, games[0]["data"]["day"] + 1)}
-                )
+                dirlist.extend(str(day) for day in range(1, 100))
+                test_day = 100
+                while get_games(season=path_info["season"], count=1, day=test_day):
+                    dirlist.append(str(test_day))
+                    test_day += 1
             else:
                 dirlist.extend(map(str, range(1, sim_data.season + 1)))
         elif path_info.get("sorting") == "team":
             if "season" in path_info:
                 games = get_games(
-                        season=path_info["season"], team_ids=TEAMS[path_info["team"]]
-                    )
+                    season=path_info["season"], team_ids=TEAMS[path_info["team"]]
+                )
                 if not games:
                     return -fuse.ENOENT
                 dirlist.extend(
@@ -202,7 +205,12 @@ TEAMS = {
 if __name__ == "__main__":
     server = BlaseFS()
 
-    server.parser.add_option(mountopt="vcr", metavar="URL", default="", help="use blaseball.vcr at URL instead of Chronicler (ie. http://localhost:8000/)")
+    server.parser.add_option(
+        mountopt="vcr",
+        metavar="URL",
+        default="",
+        help="use blaseball.vcr at URL instead of Chronicler (ie. http://localhost:8000/)",
+    )
     server.parse(values=server, errex=1)
 
     if hasattr(server, "vcr"):
@@ -212,10 +220,15 @@ if __name__ == "__main__":
         try:
             games = get_games(count=1)
             if not games:
-                print(f"Could not connect to blaseball.vcr at {server.vcr}", file=sys.stderr)
+                print(
+                    f"Could not connect to blaseball.vcr at {server.vcr}",
+                    file=sys.stderr,
+                )
                 sys.exit(1)
         except:
-            print(f"Could not connect to blaseball.vcr at {server.vcr}", file=sys.stderr)
+            print(
+                f"Could not connect to blaseball.vcr at {server.vcr}", file=sys.stderr
+            )
             sys.exit(1)
 
     server.main()
