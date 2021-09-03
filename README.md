@@ -7,8 +7,8 @@ Installation may require `libfuse-dev` or similar installed, to compile the `fus
 ## Usage
 `python blasefs.py <mountpoint>`
 
-You can specify a VCR URL in order to avoid hammering Chronicler. VCR can be fairly slow for the
-kind of operations that blasefs performs, but it is perfectly usable!  
+You can also provide the URL for an instance of [blaseball.vcr](https://github.com/alisww/blaseball.vcr)
+if you'd rather not use Chronicler, or just for fun.
 `python blasefs.py -o vcr=URL <mountpoint>`
 
 ## Caveats
