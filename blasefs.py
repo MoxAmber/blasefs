@@ -37,13 +37,15 @@ class BlaseFS(Fuse):
             if len(parts) > 2:
                 path_info["day"] = int(parts[2])
             if len(parts) > 3:
-                path_info["game"] = parts[3]
+                path_info["teams"] = (
+                    parts[3].replace("\\", "").replace('"', "").split(" vs ")
+                )
                 path_info["type"] = "file"
         if parts[0] == "by_team":
             path_info["type"] = "dir"
             path_info["sorting"] = "team"
             if len(parts) > 1:
-                path_info["team"] = parts[1]
+                path_info["teams"] = [parts[1]]
             if len(parts) > 2:
                 path_info["season"] = int(parts[2])
             if len(parts) > 3:
@@ -96,20 +98,25 @@ class BlaseFS(Fuse):
         elif path_info.get("sorting") == "team":
             if "season" in path_info:
                 games = get_games(
-                    season=path_info["season"], team_ids=TEAMS[path_info["team"]]
+                    season=path_info["season"], team_ids=TEAMS[path_info["teams"][0]]
                 )
                 if not games:
                     return -fuse.ENOENT
-                dirlist.extend(
-                    f"{game['data']['day']} vs {home if (home := game['data']['homeTeamNickname']) != path_info['team'] else game['data']['awayTeamNickname']}"
-                    for game in games
-                )
-            elif "team" in path_info:
-                if path_info["team"] not in TEAMS:
+
+                for game in games:
+                    opposing_team = (
+                        game["data"]["awayTeamNickname"]
+                        if game["data"]["homeTeam"] == TEAMS[path_info["teams"][0]]
+                        else game["data"]["homeTeamNickname"]
+                    )
+                    dirlist.append(f"{game['data']['day'] + 1} vs {opposing_team}")
+
+            elif "teams" in path_info:
+                if path_info["teams"][0] not in TEAMS:
                     return -fuse.ENOENT
                 for season in range(1, sim_data.season + 1):
                     if get_games(
-                        season=season, team_ids=TEAMS[path_info["team"]], count=1
+                        season=season, team_ids=TEAMS[path_info["teams"][0]], count=1
                     ):
                         dirlist.append(str(season))
             else:
@@ -124,18 +131,24 @@ class BlaseFS(Fuse):
         if path_info["type"] != "file":
             return -fuse.ENOENT
 
-        if path_info["sorting"] == "season":
-            teams = path_info["game"].replace("\\", "").replace('"', "").split(" vs ")
-        elif path_info["sorting"] == "team":
-            teams = [path_info["team"]]
+        teams = [TEAMS[x] for x in path_info["teams"] if x in TEAMS]
+        if teams:
+            games = get_games(
+                season=path_info.get("season", 1),
+                team_ids=teams,
+                day=path_info.get("day", 1),
+            )
         else:
-            return -fuse.ENOENT
-
-        games = get_games(
-            season=path_info.get("season", 1),
-            team_ids=TEAMS[teams[0]],
-            day=path_info.get("day", 1),
-        )
+            games = get_games(
+                season=path_info.get("season", 1), day=path_info.get("day", 1)
+            )
+            for game in games:
+                if (
+                    game["data"]["homeTeamNickname"] in path_info["teams"]
+                    or game["data"]["awayTeamNickname"] in path_info["teams"]
+                ):
+                    games = [game]
+                    continue
         if not games:
             return -fuse.ENOENT
 
