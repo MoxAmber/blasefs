@@ -88,11 +88,8 @@ class BlaseFS(Fuse):
             elif "season" in path_info:
                 if path_info["season"] > sim_data.season or path_info["season"] < 1:
                     return -fuse.ENOENT
-                dirlist.extend(str(day) for day in range(1, 100))
-                test_day = 100
-                while get_games(season=path_info["season"], count=1, day=test_day):
-                    dirlist.append(str(test_day))
-                    test_day += 1
+                last = get_games(season=path_info["season"], count=1, order="desc")
+                dirlist.extend(str(day) for day in range(1, last[0]['data']['day'] + 2))
             else:
                 dirlist.extend(map(str, range(1, sim_data.season + 1)))
         elif path_info.get("sorting") == "team":
